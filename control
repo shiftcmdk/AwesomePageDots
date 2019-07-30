@@ -1,0 +1,10 @@
+Package: com.shiftcmdk.awesomepagedots
+Name: AwesomePageDots
+Depends: mobilesubstrate
+Version: 1.0
+Architecture: iphoneos-arm
+Description: Animated page control for the home screen.
+Maintainer: shiftcmdk
+Author: shiftcmdk
+Section: Tweaks
+Depiction: https://shiftcmdk.github.io/repo/depictions/?p=com.shiftcmdk.awesomepagedots
