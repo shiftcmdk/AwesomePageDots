@@ -1,5 +1,7 @@
 include $(THEOS)/makefiles/common.mk
 
+ARCHS = arm64 arm64e
+
 TWEAK_NAME = AwesomePageDots
 AwesomePageDots_FILES = Tweak.xm
 
