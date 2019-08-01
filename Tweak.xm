@@ -3,6 +3,7 @@
 @property (nonatomic, retain) UIColor *fakeColor;
 @property (nonatomic, retain) UIView *fakeView;
 @property (nonatomic, assign) BOOL fakeSetTintColor;
+@property (nonatomic, assign) BOOL inFolder;
 @property (nonatomic, assign) NSInteger currentPageValue;
 @property (nonatomic, retain) NSNumber *percentage;
 -(void)didScroll:(UIScrollView *)scrollView;
@@ -16,12 +17,21 @@
 
 @end
 
+@interface SBRootFolderView : SBFolderView
+@end
+
 %hook SBFolderView
 
 -(void)scrollViewDidScroll:(UIScrollView *)arg1 {
 	%orig;
 
 	[self.pageControl didScroll:arg1];
+}
+
+-(void)_updatePageControlToIndex:(long long)arg1 {
+	self.pageControl.inFolder = ![self isKindOfClass:[%c(SBRootFolderView) class]];
+
+	%orig;
 }
 
 %end
@@ -33,6 +43,7 @@
 %property (nonatomic, assign) BOOL fakeSetTintColor;
 %property (nonatomic, assign) NSInteger currentPageValue;
 %property (nonatomic, retain) NSNumber *percentage;
+%property (nonatomic, assign) BOOL inFolder;
 
 -(id)initWithFrame:(CGRect)arg1 {
 	SBIconListPageControl *original = %orig;
@@ -40,6 +51,7 @@
 	original.fakeSetTintColor = NO;
 	original.currentPageValue = -1;
 	original.percentage = [NSNumber numberWithFloat:0.0];
+	original.inFolder = NO;
 
 	return original;
 }
@@ -54,14 +66,18 @@
 
 	NSArray *indicators = [self valueForKey:@"_indicators"];
 
+	UIUserInterfaceLayoutDirection direction = [UIApplication sharedApplication].userInterfaceLayoutDirection;
+
+    BOOL isRightToLeft = direction == UIUserInterfaceLayoutDirectionRightToLeft;
+
 	if (self.currentPageValue == -1) {
 		self.currentPageValue = self.currentPage;
 	}
 
-	UIView *currentIndicatorView = indicators[self.currentPageValue];
+	UIView *currentIndicatorView = indicators[isRightToLeft ? self.numberOfPages - self.currentPageValue - 1 : self.currentPageValue];
 
 	if (self.currentPageValue >= 0 && self.currentPageValue < self.numberOfPages - 1) {
-		UIView *nextIndicatorView = indicators[self.currentPageValue + 1];
+		UIView *nextIndicatorView = indicators[isRightToLeft ? self.numberOfPages - self.currentPageValue - 2 : self.currentPageValue + 1];
 
 		CGFloat indicatorWidth = currentIndicatorView.frame.size.width;
 		CGFloat indicatorHeight = currentIndicatorView.frame.size.width;
@@ -103,6 +119,8 @@
 
 	self.fakeView.backgroundColor = self.fakeColor;
 	self.fakeView.layer.cornerRadius = self.fakeView.bounds.size.height / 2.0;
+
+	self.fakeView.hidden = self.numberOfPages == 1 && self.inFolder;
 }
 
 %new
