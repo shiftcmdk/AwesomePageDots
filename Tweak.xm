@@ -74,7 +74,7 @@
 		self.currentPageValue = self.currentPage;
 	}
 
-	UIView *currentIndicatorView = indicators[isRightToLeft ? self.numberOfPages - self.currentPageValue - 1 : self.currentPageValue];
+	UIView *currentIndicatorView = indicators[isRightToLeft ? MAX(0, self.numberOfPages - self.currentPageValue - 1) : self.currentPageValue];
 
 	if (self.currentPageValue >= 0 && self.currentPageValue < self.numberOfPages - 1) {
 		UIView *nextIndicatorView = indicators[isRightToLeft ? self.numberOfPages - self.currentPageValue - 2 : self.currentPageValue + 1];
