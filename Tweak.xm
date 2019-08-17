@@ -306,6 +306,10 @@ BOOL moveUp = NO;
 -(void)setFakeViewFrame {
     NSArray<UIView *> *indicators = [self valueForKey:@"_indicators"];
 
+    if (!indicators || indicators.count == 0) {
+        return;
+    }
+
     if (!self.fakeIndicators) {
         self.fakeIndicators = [NSMutableArray array];
 
