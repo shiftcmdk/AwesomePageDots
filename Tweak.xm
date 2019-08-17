@@ -370,6 +370,16 @@ BOOL moveUp = NO;
                 break;
         }
     } else if (self.currentPageValue == self.numberOfPages - 1) {
+        switch (selectedAnimation) {
+            case APDAnimationFade:
+            case APDAnimationFollow:
+            case APDAnimationDash:
+                [self hideFakeIndicators:YES];
+                break;
+            default:
+                [self hideFakeIndicators:NO];
+                break;
+        }
         self.fakeView.frame = currentIndicatorView.frame;
     }
 
