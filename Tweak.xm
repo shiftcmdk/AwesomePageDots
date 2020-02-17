@@ -324,7 +324,7 @@ BOOL moveUp = NO;
         }
     }
 
-    if (self.currentPageValue == -1) {
+    if (self.currentPageValue == -1 || self.currentPageValue >= indicators.count) {
         self.currentPageValue = self.currentPage;
     }
 
