@@ -1,35 +1,4 @@
-#import "APDAnimation.h"
-
-@interface SBIconListPageControl : UIPageControl
-
-@property (nonatomic, retain) UIColor *fakeColor;
-@property (nonatomic, retain) UIView *fakeView;
-@property (nonatomic, retain) NSMutableArray<UIView *> *fakeIndicators;
-@property (nonatomic, assign) BOOL fakeSetTintColor;
-@property (nonatomic, assign) BOOL inFolder;
-@property (nonatomic, assign) BOOL setIdentity;
-@property (nonatomic, assign) NSInteger currentPageValue;
-@property (nonatomic, retain) NSNumber *percentage;
--(void)didScroll:(UIScrollView *)scrollView;
--(void)setFakeViewFrame;
--(void)hideFakeIndicators:(BOOL)hide;
--(void)dashAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView;
--(void)swapAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView;
--(void)shuffleAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView;
--(void)followAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView;
--(void)fadeAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView;
--(void)jumpAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView;
-
-@end
-
-@interface SBFolderView : UIView
-
-@property (nonatomic,retain) SBIconListPageControl * pageControl;
-
-@end
-
-@interface SBRootFolderView : SBFolderView
-@end
+#import "AwesomePageDots.h"
 
 APDAnimation selectedAnimation = APDAnimationDash;
 BOOL moveUp = NO;
@@ -60,6 +29,7 @@ BOOL moveUp = NO;
 %property (nonatomic, assign) BOOL inFolder;
 %property (nonatomic, assign) BOOL setIdentity;
 %property (nonatomic, retain) NSMutableArray *fakeIndicators;
+%property (nonatomic, retain) NSDictionary *animators;
 
 -(id)initWithFrame:(CGRect)arg1 {
     SBIconListPageControl *original = %orig;
@@ -69,6 +39,16 @@ BOOL moveUp = NO;
     original.percentage = [NSNumber numberWithFloat:0.0];
     original.inFolder = NO;
     original.setIdentity = NO;
+    original.animators = @{
+        [NSNumber numberWithInt:APDAnimationDash]: [APDDashAnimator class],
+        [NSNumber numberWithInt:APDAnimationSwap]: [APDSwapAnimator class],
+        [NSNumber numberWithInt:APDAnimationShuffle]: [APDShuffleAnimator class],
+        [NSNumber numberWithInt:APDAnimationShuffleTop]: [APDShuffleTopAnimator class],
+        [NSNumber numberWithInt:APDAnimationShuffleBottom]: [APDShuffleBottomAnimator class],
+        [NSNumber numberWithInt:APDAnimationFollow]: [APDFollowAnimator class],
+        [NSNumber numberWithInt:APDAnimationFade]: [APDFadeAnimator class],
+        [NSNumber numberWithInt:APDAnimationJump]: [APDJumpAnimator class]
+    };
 
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(moveUpChanged:) name:@"AwesomePageDotsMoveUpChanged" object:nil];
 
@@ -81,257 +61,169 @@ BOOL moveUp = NO;
 }
 
 %new
--(void)hideFakeIndicators:(BOOL)hide {
-    NSArray<UIView *> *indicators = [self valueForKey:@"_indicators"];
+-(void)positionFakeIndicators {
+    NSArray<UIView *> *indicators;
+
+    UIView *theRealContentView = [[[UIView alloc] init] autorelease];
+
+    if (@available(iOS 14, *)) {
+        NSMutableArray *indicatorSubviews = [NSMutableArray array];
+
+        NSArray<UIView *> *possibleContentContainer = self.subviews[0].subviews;
+
+        for (UIView *aView in possibleContentContainer) {
+            if ([aView isKindOfClass:NSClassFromString(@"_UIPageControlIndicatorContentView")]) {
+                theRealContentView = aView;
+
+                for (UIView *indicatorView in aView.subviews) {
+                    if ([indicatorView isKindOfClass:NSClassFromString(@"_UIPageIndicatorView")]) {
+                        [indicatorSubviews addObject:indicatorView];
+                    }
+                }
+            }
+        }
+
+        indicators = indicatorSubviews;
+    } else {
+        indicators = [self valueForKey:@"_indicators"];
+    }
 
     UIUserInterfaceLayoutDirection direction = [UIApplication sharedApplication].userInterfaceLayoutDirection;
     
     BOOL isRightToLeft = direction == UIUserInterfaceLayoutDirectionRightToLeft;
 
-    for (int i = 0; i < indicators.count; i++) {
-        int fakeIndex = i < self.currentPageValue ? i : i - 1;
+    UIEdgeInsets realInsets = UIEdgeInsetsZero;
 
-        if (i != self.currentPageValue) {
-            self.fakeIndicators[fakeIndex].frame = indicators[isRightToLeft ? self.numberOfPages - i - 1 : i].frame;
+    if (indicators.count > 0) {
+        realInsets = [self calculateRealInsets:indicators[0]];
+    }
+
+    BOOL needsAll = indicators.count == self.fakeIndicators.count;
+
+    for (int i = 0; i < indicators.count; i++) {
+        int fakeIndex = 0;
+
+        if (needsAll) {
+            fakeIndex = i;
+        } else {
+            fakeIndex = i < self.currentPageValue ? i : i - 1;
+        }
+
+        if (needsAll || i != self.currentPageValue) {
+            self.fakeIndicators[fakeIndex].frame = UIEdgeInsetsInsetRect(indicators[isRightToLeft ? self.numberOfPages - i - 1 : i].frame, realInsets);
             self.fakeIndicators[fakeIndex].layer.cornerRadius = self.fakeIndicators[fakeIndex].bounds.size.height / 2.0;
             self.fakeIndicators[fakeIndex].backgroundColor = [self pageIndicatorTintColor];
-            self.fakeIndicators[fakeIndex].alpha = hide ? 0.0 : 1.0;
+
+            if (!self.fakeIndicators[fakeIndex].superview) {
+                [indicators[i].superview addSubview:self.fakeIndicators[fakeIndex]];
+            }
+
+            self.fakeIndicators[fakeIndex].alpha = 1.0;
         }
-        indicators[i].alpha = hide ? 1.0 : 0.0;
+
+        if (!self.fakeView.superview) {
+            [indicators[i].superview addSubview:self.fakeView];
+        }
+
+        indicators[i].alpha = 0.0;
     }
 }
 
 %new
--(void)dashAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView {
-    [self hideFakeIndicators:YES];
+-(UIEdgeInsets)calculateRealInsets:(UIView *)indicator {
+    if (@available(iOS 14, *)) {
+        UIEdgeInsets insets = ((UIImage *)[indicator valueForKey:@"image"])._contentInsets;
+        CGRect indicatorFrame = UIEdgeInsetsInsetRect(indicator.frame, insets);
+        CGFloat indicatorWidth = MIN(indicatorFrame.size.width, indicatorFrame.size.height);
+        indicatorWidth = 7.5;
 
-    CGFloat indicatorWidth = currentIndicatorView.frame.size.width;
-    CGFloat indicatorHeight = currentIndicatorView.frame.size.width;
+        CGFloat horizontalInset = (indicator.frame.size.width - indicatorWidth) / 2.0;
+        CGFloat verticalInset = (indicator.frame.size.height - indicatorWidth) / 2.0;
 
-    CGFloat currentX = currentIndicatorView.frame.origin.x;
-    CGFloat nextX = nextIndicatorView.frame.origin.x;
+        UIEdgeInsets realInsets = UIEdgeInsetsMake(verticalInset, horizontalInset, verticalInset, horizontalInset);
 
-    CGFloat distance = nextIndicatorView.frame.origin.x - currentX;
-
-    CGFloat dotX = currentIndicatorView.frame.origin.x + [self.percentage floatValue] * distance;
-    CGFloat dotCenterX = dotX + indicatorWidth / 2.0;
-    CGFloat stretchedX = dotCenterX - distance / 2.0;
-
-    CGFloat newWidth;
-    CGFloat newX;
-
-    if ([self.percentage floatValue] < 0.5) {
-        CGFloat cutOff = fmax(0.0, currentX - stretchedX) * 2.0;
-        newWidth = distance - cutOff;
-        newX = currentX + fmax(0.0, stretchedX - currentX);
-    } else if ([self.percentage floatValue] > 0.5) {
-        CGFloat cutOff = fmax(0.0, (stretchedX + distance) - (nextX + indicatorWidth)) * 2.0;
-        newWidth = distance - cutOff;
-        newX = stretchedX + cutOff / 2.0;
-    } else {
-        newWidth = distance;
-        newX = stretchedX;
+        return realInsets;
     }
 
-    self.fakeView.frame = CGRectMake(
-        newX,
-        currentIndicatorView.frame.origin.y,
-        fmax(newWidth, indicatorWidth),
-        indicatorHeight
-    );
+    return UIEdgeInsetsZero;
 }
 
 %new
--(void)swapAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView {
-    [self hideFakeIndicators:NO];
+-(void)rebuildFakeIndicatorsIfNecessary:(BOOL)needsAll contentView:(UIView *)contentView indicators:(NSArray<UIView *> *)indicators insets:(UIEdgeInsets)insets {
+    BOOL needsRebuild = !self.fakeIndicators || (needsAll && self.fakeIndicators.count < indicators.count) || (!needsAll && self.fakeIndicators.count >= indicators.count) || (!needsAll && self.fakeIndicators.count != indicators.count - 1);
 
-    UIView *nextFakeIndicator = self.fakeIndicators[self.currentPageValue];
+    if (needsRebuild) {
+        if (self.fakeIndicators) {
+            for (UIView *indicator in self.fakeIndicators) {
+                [indicator removeFromSuperview];
+            }
+        }
 
-    CGFloat currentX = currentIndicatorView.frame.origin.x;
+        self.fakeIndicators = [NSMutableArray array];
 
-    CGFloat distance = nextIndicatorView.frame.origin.x - currentX;
-    
-    nextFakeIndicator.frame = CGRectMake(
-        nextIndicatorView.frame.origin.x - [self.percentage floatValue] * distance,
-        nextFakeIndicator.frame.origin.y,
-        nextFakeIndicator.frame.size.width,
-        nextFakeIndicator.frame.size.height
-    );
+        int count = needsAll ? indicators.count : indicators.count - 1;
 
-    CGFloat indicatorWidth = currentIndicatorView.frame.size.width;
-    CGFloat indicatorHeight = currentIndicatorView.frame.size.width;
-    
-    self.fakeView.frame = CGRectMake(
-        currentIndicatorView.frame.origin.x + [self.percentage floatValue] * distance,
-        currentIndicatorView.frame.origin.y,
-        indicatorWidth,
-        indicatorHeight
-    );
-}
+        for (int i = 0; i < count; i++) {
+            UIView *indicator = indicators[i];
 
-%new
--(void)shuffleAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView {
-    [self hideFakeIndicators:NO];
+            UIView *fakeIndicator = [[[UIView alloc] initWithFrame:UIEdgeInsetsInsetRect(indicator.frame, insets)] autorelease];
 
-    UIView *nextFakeIndicator = self.fakeIndicators[self.currentPageValue];
+            [contentView addSubview:fakeIndicator];
 
-    CGFloat currentX = currentIndicatorView.frame.origin.x;
-    CGFloat currentY = currentIndicatorView.frame.origin.y;
-
-    CGFloat distance = nextIndicatorView.frame.origin.x - currentX;
-    CGFloat radius = distance / 2.0;
-
-    CGFloat factor;
-
-    if (selectedAnimation == APDAnimationShuffleTop) {
-        factor = 1.0;
-    } else if (selectedAnimation == APDAnimationShuffleBottom) {
-        factor = -1.0;
-    } else {
-        factor = self.currentPageValue % 2 == 0 ? 1.0 : -1.0;
+            [self.fakeIndicators addObject:fakeIndicator];
+        }
     }
-
-    CGFloat x = currentX + radius + radius * cos(M_PI + factor * [self.percentage floatValue] * M_PI);
-    CGFloat y = currentY + radius * sin(M_PI + factor * [self.percentage floatValue] * M_PI);
-
-    CGFloat nextX = currentX + radius + radius * cos(2.0 * M_PI + factor * [self.percentage floatValue] * M_PI);
-    CGFloat nextY = currentY + radius * sin(2.0 * M_PI + factor * [self.percentage floatValue] * M_PI);
-
-    nextFakeIndicator.frame = CGRectMake(
-        nextX,
-        nextY,
-        nextFakeIndicator.frame.size.width,
-        nextFakeIndicator.frame.size.height
-    );
-
-    CGFloat indicatorWidth = currentIndicatorView.frame.size.width;
-    CGFloat indicatorHeight = currentIndicatorView.frame.size.width;
-
-    self.fakeView.frame = CGRectMake(
-        x,
-        y,
-        indicatorWidth,
-        indicatorHeight
-    );
-}
-
-%new
--(void)followAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView {
-    [self hideFakeIndicators:YES];
-
-    CGFloat currentX = currentIndicatorView.frame.origin.x;
-
-    CGFloat distance = nextIndicatorView.frame.origin.x - currentX;
-
-    CGFloat indicatorWidth = currentIndicatorView.frame.size.width;
-    CGFloat indicatorHeight = currentIndicatorView.frame.size.width;
-    
-    self.fakeView.frame = CGRectMake(
-        currentIndicatorView.frame.origin.x + [self.percentage floatValue] * distance,
-        currentIndicatorView.frame.origin.y,
-        indicatorWidth,
-        indicatorHeight
-    );
-}
-
-%new
--(void)fadeAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView {
-    [self hideFakeIndicators:YES];
-
-    CGFloat indicatorWidth = currentIndicatorView.frame.size.width;
-    CGFloat indicatorHeight = currentIndicatorView.frame.size.width;
-
-    CGRect newFrame;
-
-    if ([self.percentage floatValue] < 0.5) {
-        CGFloat newWidthAndHeight = indicatorWidth - 2.0 * [self.percentage floatValue] * indicatorWidth;
-
-        newFrame = CGRectMake(
-            currentIndicatorView.frame.origin.x + indicatorWidth / 2.0 - newWidthAndHeight / 2.0,
-            currentIndicatorView.frame.origin.y + indicatorHeight / 2.0 - newWidthAndHeight / 2.0,
-            newWidthAndHeight,
-            newWidthAndHeight
-        );
-    } else if ([self.percentage floatValue] > 0.5) {
-        CGFloat newWidthAndHeight = 2.0 * ([self.percentage floatValue] - 0.5) * indicatorWidth;
-
-        newFrame = CGRectMake(
-            nextIndicatorView.frame.origin.x + indicatorWidth / 2.0 - newWidthAndHeight / 2.0,
-            nextIndicatorView.frame.origin.y + indicatorHeight / 2.0 - newWidthAndHeight / 2.0,
-            newWidthAndHeight,
-            newWidthAndHeight
-        );
-    } else {
-        newFrame = CGRectZero;
-    }
-
-    self.fakeView.frame = newFrame;
-}
-
-%new
--(void)jumpAnimation:(UIView *)currentIndicatorView nextIndicatorView:(UIView *)nextIndicatorView {
-    [self hideFakeIndicators:NO];
-
-    UIView *nextFakeIndicator = self.fakeIndicators[self.currentPageValue];
-
-    CGFloat currentX = currentIndicatorView.frame.origin.x;
-    CGFloat currentY = currentIndicatorView.frame.origin.y;
-
-    CGFloat distance = nextIndicatorView.frame.origin.x - currentX;
-
-    CGFloat radius = distance / 2.0;
-    
-    nextFakeIndicator.frame = CGRectMake(
-        nextIndicatorView.frame.origin.x - [self.percentage floatValue] * distance,
-        nextFakeIndicator.frame.origin.y,
-        nextFakeIndicator.frame.size.width,
-        nextFakeIndicator.frame.size.height
-    );
-
-    CGFloat x = currentX + radius + radius * cos(M_PI + [self.percentage floatValue] * M_PI);
-    CGFloat y = currentY + radius * sin(M_PI + [self.percentage floatValue] * M_PI);
-
-    CGFloat indicatorWidth = currentIndicatorView.frame.size.width;
-    CGFloat indicatorHeight = currentIndicatorView.frame.size.width;
-
-    self.fakeView.frame = CGRectMake(
-        x,
-        y,
-        indicatorWidth,
-        indicatorHeight
-    );
 }
 
 %new
 -(void)setFakeViewFrame {
-    NSArray<UIView *> *indicators = [self valueForKey:@"_indicators"];
+    NSArray<UIView *> *indicators;
+
+    UIView *theRealContentView = self;
+
+    if (@available(iOS 14, *)) {
+        NSMutableArray *indicatorSubviews = [NSMutableArray array];
+
+        NSArray<UIView *> *possibleContentContainer = self.subviews[0].subviews;
+
+        for (UIView *aView in possibleContentContainer) {
+            if ([aView isKindOfClass:NSClassFromString(@"_UIPageControlIndicatorContentView")]) {
+                theRealContentView = aView;
+
+                for (UIView *indicatorView in aView.subviews) {
+                    if ([indicatorView isKindOfClass:NSClassFromString(@"_UIPageIndicatorView")]) {
+                        [indicatorSubviews addObject:indicatorView];
+                    }
+                }
+            }
+        }
+        indicators = indicatorSubviews;
+    } else {
+        indicators = [self valueForKey:@"_indicators"];
+    }
 
     if (!indicators || indicators.count == 0) {
         return;
     }
 
-    if (!self.fakeIndicators) {
-        self.fakeIndicators = [NSMutableArray array];
+    UIEdgeInsets realInsets = [self calculateRealInsets:indicators[0]];
 
-        for (int i = 0; i < indicators.count - 1; i++) {
-            UIView *indicator = indicators[i];
+    id<APDAnimator> animator = [self.animators objectForKey:[NSNumber numberWithInt:selectedAnimation]];
 
-            UIView *fakeIndicator = [[[UIView alloc] initWithFrame:indicator.frame] autorelease];
-
-            [self addSubview:fakeIndicator];
-
-            [self.fakeIndicators addObject:fakeIndicator];
-        }
+    if (!animator) {
+        animator = [APDDashAnimator class];
     }
 
+    [self rebuildFakeIndicatorsIfNecessary:[animator needsAllPageDots] contentView:theRealContentView indicators:indicators insets:realInsets];
+
     if (self.currentPageValue == -1 || self.currentPageValue >= indicators.count) {
-        self.currentPageValue = self.currentPage;
+        self.currentPageValue = MIN(self.currentPage, indicators.count - 1);
     }
 
     if (!self.fakeView) {
         self.fakeView = [[[UIView alloc] init] autorelease];
 
-        [self addSubview:self.fakeView];
+        [theRealContentView addSubview:self.fakeView];
     }
 
     UIUserInterfaceLayoutDirection direction = [UIApplication sharedApplication].userInterfaceLayoutDirection;
@@ -343,44 +235,20 @@ BOOL moveUp = NO;
     if (self.currentPageValue >= 0 && self.currentPageValue < self.numberOfPages - 1) {
         UIView *nextIndicatorView = indicators[isRightToLeft ? self.numberOfPages - self.currentPageValue - 2 : self.currentPageValue + 1];
 
-        switch (selectedAnimation) {
-            case APDAnimationFade:
-                [self fadeAnimation:currentIndicatorView nextIndicatorView:nextIndicatorView];
-                break;
-            case APDAnimationFollow:
-                [self followAnimation:currentIndicatorView nextIndicatorView:nextIndicatorView];
-                break;
-            case APDAnimationJump:
-                [self jumpAnimation:currentIndicatorView nextIndicatorView:nextIndicatorView];
-                break;
-            case APDAnimationShuffle:
-                [self shuffleAnimation:currentIndicatorView nextIndicatorView:nextIndicatorView];
-                break;
-            case APDAnimationShuffleTop:
-                [self shuffleAnimation:currentIndicatorView nextIndicatorView:nextIndicatorView];
-                break;
-            case APDAnimationShuffleBottom:
-                [self shuffleAnimation:currentIndicatorView nextIndicatorView:nextIndicatorView];
-                break;
-            case APDAnimationSwap:
-                [self swapAnimation:currentIndicatorView nextIndicatorView:nextIndicatorView];
-                break;
-            default:
-                [self dashAnimation:currentIndicatorView nextIndicatorView:nextIndicatorView];
-                break;
-        }
+        [animator 
+            animateWith:UIEdgeInsetsInsetRect(currentIndicatorView.frame, realInsets)  
+            nextIndicatorView:UIEdgeInsetsInsetRect(nextIndicatorView.frame, realInsets) 
+            position:^ {
+                [self positionFakeIndicators];
+            }
+            percentage:self.percentage 
+            fakeView:self.fakeView 
+            currentPageValue:self.currentPageValue 
+            fakeIndicators:self.fakeIndicators
+        ];
     } else if (self.currentPageValue == self.numberOfPages - 1) {
-        switch (selectedAnimation) {
-            case APDAnimationFade:
-            case APDAnimationFollow:
-            case APDAnimationDash:
-                [self hideFakeIndicators:YES];
-                break;
-            default:
-                [self hideFakeIndicators:NO];
-                break;
-        }
-        self.fakeView.frame = currentIndicatorView.frame;
+        [self positionFakeIndicators];
+        self.fakeView.frame = UIEdgeInsetsInsetRect(currentIndicatorView.frame, realInsets);
     }
 
     self.fakeView.backgroundColor = self.fakeColor;
@@ -476,6 +344,8 @@ BOOL moveUp = NO;
     self.percentage = nil;
 
     self.fakeIndicators = nil;
+
+    self.animators = nil;
 
     %orig;
 }

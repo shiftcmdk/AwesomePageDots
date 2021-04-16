@@ -1,11 +1,13 @@
-include $(THEOS)/makefiles/common.mk
-
 ARCHS = arm64 arm64e
 
+include $(THEOS)/makefiles/common.mk
+
 BUNDLE_NAME = AwesomePageDotsPreferences
+
+AwesomePageDotsPreferences_FRAMEWORKS = UIKit CoreGraphics
+
 AwesomePageDotsPreferences_FILES = APDRootListController.m
 AwesomePageDotsPreferences_INSTALL_PATH = /Library/PreferenceBundles
-AwesomePageDotsPreferences_FRAMEWORKS = UIKit
 AwesomePageDotsPreferences_PRIVATE_FRAMEWORKS = Preferences
 
 include $(THEOS_MAKE_PATH)/bundle.mk
